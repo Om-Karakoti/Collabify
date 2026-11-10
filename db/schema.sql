@@ -31,8 +31,64 @@ CREATE TABLE IF NOT EXISTS creators (
         'Minimalist', 'High-energy', 'Behind the scenes', 'Reviews & unboxings'
     )),
     bio TEXT NOT NULL CHECK (char_length(bio) BETWEEN 1 AND 140),
+    profile_links JSONB NOT NULL DEFAULT '[]'::JSONB CHECK (jsonb_typeof(profile_links) = 'array'),
+    avatar_image BYTEA,
+    avatar_mime_type TEXT CHECK (avatar_mime_type IN ('image/jpeg', 'image/png', 'image/webp')),
+    CHECK ((avatar_image IS NULL) = (avatar_mime_type IS NULL)),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE creators
+    ADD COLUMN IF NOT EXISTS profile_links JSONB NOT NULL DEFAULT '[]'::JSONB;
+ALTER TABLE creators ADD COLUMN IF NOT EXISTS avatar_image BYTEA;
+ALTER TABLE creators ADD COLUMN IF NOT EXISTS avatar_mime_type TEXT;
+
+CREATE TABLE IF NOT EXISTS creator_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    creator_id UUID UNIQUE REFERENCES creators(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE creators
+    ADD COLUMN IF NOT EXISTS account_id UUID UNIQUE REFERENCES creator_accounts(id) ON DELETE CASCADE;
+
+CREATE TABLE IF NOT EXISTS account_sessions (
+    token_hash TEXT PRIMARY KEY,
+    account_id UUID NOT NULL REFERENCES creator_accounts(id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS account_sessions_expiry_idx ON account_sessions (expires_at);
+
+CREATE TABLE IF NOT EXISTS saved_creators (
+    account_id UUID NOT NULL REFERENCES creator_accounts(id) ON DELETE CASCADE,
+    creator_id UUID NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (account_id, creator_id)
+);
+
+CREATE TABLE IF NOT EXISTS conversations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    creator_a_id UUID NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+    creator_b_id UUID NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (creator_a_id < creator_b_id),
+    UNIQUE (creator_a_id, creator_b_id)
+);
+
+CREATE TABLE IF NOT EXISTS conversation_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    sender_creator_id UUID NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+    body TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 2000),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    read_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS conversation_messages_timeline_idx
+    ON conversation_messages (conversation_id, created_at, id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS creators_handle_unique
     ON creators (LOWER(handle));
@@ -51,10 +107,13 @@ CREATE INDEX IF NOT EXISTS creator_platforms_platform_idx
 
 CREATE TABLE IF NOT EXISTS collaboration_introductions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sender_creator_id UUID REFERENCES creators(id) ON DELETE CASCADE,
     recipient_creator_id UUID NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
     request_key UUID NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE collaboration_introductions
+    ADD COLUMN IF NOT EXISTS sender_creator_id UUID REFERENCES creators(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS collaboration_introductions_created_idx
     ON collaboration_introductions (created_at DESC);
 

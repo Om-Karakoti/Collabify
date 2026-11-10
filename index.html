@@ -23,9 +23,10 @@
 
         <div class="workspace-label">WORKSPACE</div>
         <nav class="main-nav" aria-label="Main navigation">
-          <a class="nav-link active" href="#discover"><span class="nav-icon">⌕</span> Discover <span class="nav-count" id="nav-count">24</span></a>
-          <a class="nav-link" href="#saved"><span class="nav-icon">♡</span> Saved creators</a>
-          <a class="nav-link" href="#messages"><span class="nav-icon">▱</span> Messages <span class="notification-dot"></span></a>
+          <a class="nav-link active" href="#discover" data-view="discover"><span class="nav-icon">⌕</span> Discover <span class="nav-count" id="nav-count">24</span></a>
+          <a class="nav-link" href="#saved" data-view="saved"><span class="nav-icon">♡</span> Saved creators</a>
+          <a class="nav-link" href="#messages" data-view="messages"><span class="nav-icon">▱</span> Messages <span class="notification-dot" id="message-dot" hidden></span></a>
+          <a class="nav-link" href="#profile" data-view="profile"><span class="nav-icon">◉</span> My profile</a>
         </nav>
 
         <div class="sidebar-divider"></div>
@@ -41,7 +42,7 @@
         </div>
         <button class="user-profile" id="profile-button" type="button">
           <span class="user-avatar">Y</span>
-          <span class="user-info"><strong>Your profile</strong><small>Creator account</small></span>
+          <span class="user-info"><strong id="sidebar-name">Your profile</strong><small id="sidebar-email">Sign in to your account</small></span>
           <span class="more-dots">···</span>
         </button>
       </aside>
@@ -51,12 +52,14 @@
           <button class="mobile-menu" id="mobile-menu" type="button" aria-label="Open menu">☰</button>
           <div class="breadcrumb"><span>Workspace</span><span class="crumb-slash">/</span><strong>Discover</strong></div>
           <div class="topbar-actions">
-            <button class="icon-button notification-button" type="button" aria-label="Notifications">♧<i></i></button>
+            <button class="icon-button notification-button" id="notification-button" type="button" aria-label="Open messages">♧<i id="notification-dot" hidden></i></button>
+            <button class="auth-button" id="auth-button" type="button">Sign in</button>
             <button class="top-avatar" id="top-avatar" type="button" aria-label="Register your creator profile">Y</button>
           </div>
         </header>
 
         <div class="page-content">
+          <div class="workspace-view" id="view-discover">
           <section class="welcome-row">
             <div>
               <div class="eyebrow"><span class="live-dot"></span> YOUR CREATOR COMMUNITY</div>
@@ -113,6 +116,86 @@
             <div class="empty-state" id="empty-state" hidden><span>✳</span><h3>No creators found just yet</h3><p>Try adjusting your filters or search for another niche.</p><button class="secondary-button" id="empty-reset" type="button">Clear all filters</button></div>
             <div class="load-more-wrap"><button class="load-more" id="load-more" type="button">Show more creators <span>↓</span></button></div>
           </section>
+          </div>
+
+          <section class="workspace-view" id="saved" hidden>
+            <div class="view-heading">
+              <div><div class="eyebrow">YOUR COLLECTION</div><h1>Saved <span>creators.</span></h1><p class="page-subtitle">Keep the people you want to collaborate with close.</p></div>
+              <button class="secondary-button" type="button" data-view="discover">Discover creators</button>
+            </div>
+            <div class="auth-prompt saved-sync-prompt" id="saved-signin" hidden><h2>Saved on this device.</h2><p>Sign in to back up your saved creators and see your account collection on other devices.</p><button class="secondary-button" type="button" data-open-auth>Sign in to sync</button></div>
+            <div class="creator-grid" id="saved-grid" aria-live="polite"></div>
+            <div class="empty-state" id="saved-empty" hidden><span>♡</span><h3>No saved creators yet</h3><p>Save a registered creator from Discover and they’ll show up here.</p><button class="secondary-button" type="button" data-view="discover">Explore creators</button></div>
+          </section>
+
+          <section class="workspace-view" id="messages" hidden>
+            <div class="view-heading"><div><div class="eyebrow">YOUR COLLABS</div><h1>Messages<span>.</span></h1><p class="page-subtitle">Talk through ideas and make your next project happen.</p></div></div>
+            <div class="auth-prompt" id="messages-signin" hidden><h2>Conversations start with a creator account.</h2><p>Sign in to message registered creators and keep your conversations together.</p><button class="primary-button" type="button" data-open-auth>Sign in</button></div>
+            <div class="messages-layout" id="messages-layout" hidden>
+              <aside class="conversation-panel"><h2>Conversations</h2><div id="conversation-list" aria-live="polite"></div></aside>
+              <section class="chat-panel" aria-label="Conversation">
+                <div class="chat-empty" id="chat-empty"><span>✳</span><h2>Your next great collab could start here.</h2><p>Open a conversation or say hello to a creator from Discover.</p><button class="secondary-button" type="button" data-view="discover">Find creators</button></div>
+                <div class="chat-active" id="chat-active" hidden>
+                  <header class="chat-header"><div><strong id="chat-name"></strong><small id="chat-handle"></small></div></header>
+                  <div class="chat-messages" id="chat-messages" aria-live="polite"></div>
+                  <form id="chat-form" class="chat-composer"><label class="sr-only" for="chat-input">Write a message</label><textarea id="chat-input" maxlength="2000" rows="2" placeholder="Write a message..." required></textarea><button class="primary-button" type="submit">Send <span>→</span></button><p class="chat-error" id="chat-error" role="alert"></p></form>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section class="workspace-view" id="profile" hidden>
+            <div class="view-heading">
+              <div><div class="eyebrow">YOUR CREATOR IDENTITY</div><h1>My <span>profile.</span></h1><p class="page-subtitle">Tell collaborators what you make and where they can find your work.</p></div>
+              <button class="secondary-button" id="edit-profile-button" type="button" hidden>Edit profile</button>
+            </div>
+            <div class="auth-prompt" id="profile-signin" hidden>
+              <h2>Make your work easy to discover.</h2>
+              <p>Create a creator account to build your profile, add portfolio and social links, and meet collaborators in your niche.</p>
+              <button class="primary-button" type="button" data-open-register>Create your profile</button>
+            </div>
+            <article class="profile-card" id="profile-card" hidden>
+              <div class="profile-identity">
+                <span class="profile-avatar" id="profile-avatar">Y</span>
+                <div><h2 id="profile-name"></h2><p id="profile-handle"></p><span class="profile-email" id="profile-email"></span></div>
+                <span class="profile-completion" id="profile-completion"></span>
+              </div>
+              <div class="profile-facts" id="profile-facts"></div>
+              <section class="profile-bio"><h3>About my work</h3><p id="profile-bio"></p></section>
+              <section class="profile-links-section"><h3>My links & accounts</h3><div class="profile-links" id="profile-links"></div><p class="profile-no-links" id="profile-no-links" hidden>Add your GitHub, website, portfolio, or social accounts so collaborators can find your work.</p></section>
+            </article>
+            <form class="profile-editor" id="profile-form" hidden>
+              <div class="profile-editor-heading"><div><h2>Edit your creator profile</h2><p>Keep your niche, audience, and work links up to date.</p></div><span class="profile-private-note">Your account email stays private.</span></div>
+              <div class="form-row">
+                <label>Your name<input name="name" required maxlength="40" /></label>
+                <label>Creator handle<input name="handle" required maxlength="40" /></label>
+              </div>
+              <section class="profile-image-editor">
+                <div class="profile-avatar-preview" id="profile-avatar-preview">Y</div>
+                <div class="profile-image-controls">
+                  <strong>Profile photo <span>(optional)</span></strong>
+                  <p>Use a JPEG, PNG, or WebP image up to 2 MB.</p>
+                  <div><label class="secondary-button profile-image-select" for="profile-image-file">Choose image</label><button class="text-button profile-image-remove" id="remove-profile-image" type="button" hidden>Remove photo</button></div>
+                  <input class="sr-only" type="file" id="profile-image-file" accept="image/jpeg,image/png,image/webp" />
+                  <input type="hidden" id="profile-avatar-data" />
+                </div>
+              </section>
+              <div class="form-row">
+                <label>Your niche<select name="niche" id="profile-niche" required></select></label>
+                <label>Audience size<select name="audience" required><option value="">Select a range</option><option value="nano">Under 10k</option><option value="micro">10k – 50k</option><option value="mid">50k – 250k</option><option value="large">250k+</option></select></label>
+              </div>
+              <fieldset class="form-fieldset"><legend>Where do you create? <span>Select all that apply</span></legend><div class="checkbox-grid" id="profile-platforms"></div><small class="profile-platform-help">Adding links won’t clear your current platforms. Leave these unchecked to keep them.</small></fieldset>
+              <label>Content style<select name="style" id="profile-style" required></select></label>
+              <label>About your work<textarea name="bio" required maxlength="140" rows="3"></textarea></label>
+              <section class="profile-link-editor">
+                <div class="profile-editor-heading"><div><h3>Links & accounts</h3><p>Share relevant work samples, social profiles, and professional accounts.</p></div><button class="secondary-button" id="add-profile-link" type="button">＋ Add link</button></div>
+                <div class="profile-link-suggestions" id="profile-link-suggestions"></div>
+                <div class="profile-link-fields" id="profile-link-fields"></div>
+              </section>
+              <p class="form-error" id="profile-error" role="alert"></p>
+              <div class="profile-form-actions"><button class="primary-button" type="submit">Save profile</button><button class="secondary-button" id="cancel-profile-edit" type="button">Cancel</button></div>
+            </form>
+          </section>
 
           <footer class="footer"><a class="footer-brand" href="#">collabify<span>.</span></a><span>Made for creators, by the creative spirit.</span><span>© 2025 Collabify</span></footer>
         </div>
@@ -130,6 +213,8 @@
             <label>Your name<input name="name" required maxlength="40" placeholder="e.g. Alex Rivera" /></label>
             <label>Creator handle<input name="handle" required maxlength="40" placeholder="@yourhandle" /></label>
           </div>
+          <label>Email address<input name="email" type="email" required autocomplete="email" maxlength="254" placeholder="you@example.com" /></label>
+          <label>Password<input name="password" type="password" required autocomplete="new-password" minlength="12" maxlength="128" placeholder="At least 12 characters" /></label>
           <div class="form-row">
             <label>Your niche<select name="niche" id="form-niche" required></select></label>
             <label>Audience size<select name="audience" required><option value="">Select a range</option><option value="nano">Under 10k</option><option value="micro">10k – 50k</option><option value="mid">50k – 250k</option><option value="large">250k+</option></select></label>
@@ -139,7 +224,22 @@
           <label>One-line intro<textarea name="bio" required maxlength="140" placeholder="What do you love creating? What kind of collab are you looking for?" rows="2"></textarea></label>
           <p class="form-error" id="form-error" role="alert"></p>
           <button class="primary-button submit-button" type="submit">Create my creator card <span>→</span></button>
-          <p class="form-footnote">Your profile is saved in Collabify’s shared creator directory.</p>
+          <p class="form-footnote">Already have an account? <button class="inline-button" id="show-login" type="button">Sign in</button></p>
+        </form>
+      </section>
+    </div>
+    <div class="modal-backdrop" id="login-modal" hidden>
+      <section class="modal login-modal" role="dialog" aria-modal="true" aria-labelledby="login-title">
+        <button class="modal-close" id="login-close" type="button" aria-label="Close sign in">×</button>
+        <div class="modal-kicker"><span>✳</span> WELCOME BACK</div>
+        <h2 id="login-title">Sign in to <span>Collabify.</span></h2>
+        <p class="modal-intro">Pick up where your next collaboration begins.</p>
+        <form id="login-form">
+          <label>Email address<input name="email" type="email" required autocomplete="email" maxlength="254" /></label>
+          <label>Password<input name="password" type="password" required autocomplete="current-password" maxlength="128" /></label>
+          <p class="form-error" id="login-error" role="alert"></p>
+          <button class="primary-button submit-button" type="submit">Sign in</button>
+          <p class="form-footnote">New to Collabify? <button class="inline-button" id="show-register" type="button">Create a creator account</button></p>
         </form>
       </section>
     </div>
@@ -157,8 +257,8 @@
         <label class="contact-message-label" for="contact-message">A little note to get you started</label>
         <textarea id="contact-message" rows="4" maxlength="500"></textarea>
         <button class="primary-button submit-button" id="copy-message" type="button">Copy intro message <span>↗</span></button>
-        <button class="secondary-button log-intro-button" id="log-intro" type="button">I sent this intro</button>
-        <p class="form-footnote">Copy your note, contact them directly, then record it here. Only logged intros are counted.</p>
+        <button class="secondary-button log-intro-button" id="log-intro" type="button">Send Collabify message</button>
+        <p class="form-footnote" id="contact-footnote">Messages are private to the creators in this conversation.</p>
       </section>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
