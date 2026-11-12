@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Creator discovery and matchmaking with PostgreSQL-backed profiles and live community stats.",
+  "engines": {
+    "node": ">=22.9.0"
+  },
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
     "dev": "node --watch --env-file-if-exists=.env server.js",

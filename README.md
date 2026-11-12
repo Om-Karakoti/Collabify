@@ -18,6 +18,21 @@ Open Collabify at `http://localhost:3000`, served by `npm start`. Do not open `i
 
 To connect a hosted PostgreSQL instance, set `DATABASE_URL` to its connection string and start with `npm start`. If the provider requires TLS, configure `PGSSLMODE=require`; use a trusted CA rather than disabling certificate validation.
 
+## Deploy on Fly.io
+
+The included `Dockerfile` pins deployment to Node 22, which supports the Node.js environment-file option used by `npm start`. The container listens on port `8080`; keep the Fly app's `internal_port` set to `8080`.
+
+The app requires a reachable PostgreSQL database before it starts. Attach a Fly Postgres database (which sets `DATABASE_URL`) or set the connection string as a Fly secret:
+
+```powershell
+fly launch --no-deploy
+# Confirm the generated fly.toml uses internal_port = 8080.
+fly secrets set DATABASE_URL="postgres://USER:PASSWORD@HOST:5432/DATABASE"
+fly deploy
+```
+
+If machines keep restarting, check `fly logs` for startup errors. A missing or unreachable `DATABASE_URL`, invalid database credentials, or a database TLS mismatch prevents startup; configure `PGSSLMODE=require` as a Fly secret when your database requires TLS. Do not put database credentials in `fly.toml` or commit them to the repository.
+
 ## Data model
 
 - `creators`: public creator profile and audience/niche/style attributes.
