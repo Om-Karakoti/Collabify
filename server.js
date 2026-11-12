@@ -905,7 +905,7 @@ async function start() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Copy .env.example to .env and configure PostgreSQL.');
   const schema = await readFile(path.join(ROOT, 'db', 'schema.sql'), 'utf8');
   await pool.query(schema);
-  server.listen(PORT, () => console.log(`Collabify is running at http://localhost:${PORT}`));
+  server.listen(PORT, '0.0.0.0', () => console.log(`Collabify is running at http://0.0.0.0:${PORT}`));
 }
 
 async function shutdown(signal) {
