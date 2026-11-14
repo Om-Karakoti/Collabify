@@ -36,8 +36,24 @@ const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 30;
 const DB_RETRY_MS = Number(process.env.DB_RETRY_MS || 15000);
 let databaseReady = false;
+let databaseFailure = null;
 let databaseInitialization = null;
 let databaseRetryTimer = null;
+
+function describeDatabaseFailure(error) {
+  if (!process.env.DATABASE_URL) return 'DATABASE_URL is not configured';
+  const code = error && error.code;
+  if (code === '28P01') return 'the database rejected the credentials';
+  if (code === '28000') return 'the database rejected the connection';
+  if (code === '3D000') return 'the configured database does not exist';
+  if (code === '42501') return 'the database user lacks required privileges';
+  if (['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH'].includes(code)) return 'the database host could not be reached';
+  if (['ETIMEDOUT', '57014'].includes(code)) return 'the database connection timed out';
+  if (['57P01', '57P02', '57P03'].includes(code)) return 'the database is starting up or shutting down';
+  if (/self[- ]signed|certificate|ssl/i.test(error.message || '')) return 'the database TLS certificate could not be verified';
+  if (code && /^[0-9A-Z]{5}$/.test(code)) return `schema or query error (${code})`;
+  return 'the database connection could not be established';
+}
 
 function resolveSslConfig() {
   let mode = (process.env.PGSSLMODE || '').toLowerCase();
@@ -89,12 +105,13 @@ async function initializeDatabase() {
       const schema = await readFile(path.join(ROOT, 'db', 'schema.sql'), 'utf8');
       await pool.query(schema);
       databaseReady = true;
-      databaseLastError = null;
+      databaseFailure = null;
       console.log('PostgreSQL schema is ready.');
       return true;
     } catch (error) {
-      databaseLastError = error;
-      console.error(`PostgreSQL is unavailable (${error.message}). Serving the app UI and retrying every ${DB_RETRY_MS / 1000}s.`);
+      databaseReady = false;
+      databaseFailure = describeDatabaseFailure(error);
+      console.error(`PostgreSQL is unavailable (${databaseFailure}: ${error.message}). Serving the app UI and retrying every ${DB_RETRY_MS / 1000}s.`);
       scheduleDatabaseRetry();
       return false;
     } finally {
@@ -763,14 +780,15 @@ async function handleApi(request, response, url) {
   if (request.method === 'GET' && url.pathname === '/api/health') {
     sendJson(response, 200, {
       status: databaseReady ? 'ok' : 'degraded',
-      database: databaseReady ? 'ready' : 'unavailable'
+      database: databaseReady ? 'ready' : 'unavailable',
+      ...(databaseReady ? {} : { reason: databaseFailure || 'dashboard initialization has not finished yet' })
     });
     return;
   }
   if (!databaseReady) {
     response.setHeader('Retry-After', String(Math.max(1, Math.round(DB_RETRY_MS / 1000))));
     sendJson(response, 503, {
-      error: 'Collabify is still connecting to its database. The app will be ready shortly; please retry in a few seconds.',
+      error: `Collabify is still connecting to its database (${databaseFailure || 'initializing'}). The app will be ready shortly; please retry in a few seconds.`,
       database: 'unavailable'
     });
     return;

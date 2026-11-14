@@ -45,7 +45,11 @@ test('serves the UI and a degraded health report without a database', async t =>
 
   const health = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(5000) });
   assert.equal(health.status, 200);
-  assert.deepEqual(await health.json(), { status: 'degraded', database: 'unavailable' });
+  assert.deepEqual(await health.json(), {
+    status: 'degraded',
+    database: 'unavailable',
+    reason: 'DATABASE_URL is not configured'
+  });
 
   const creators = await fetch(`${base}/api/creators`, { signal: AbortSignal.timeout(5000) });
   assert.equal(creators.status, 503);
