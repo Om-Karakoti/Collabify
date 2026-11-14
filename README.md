@@ -22,7 +22,9 @@ To connect a hosted PostgreSQL instance, set `DATABASE_URL` to its connection st
 
 The included `Dockerfile` pins deployment to Node 22, which supports the Node.js environment-file option used by `npm start`. The container listens on port `8080`; keep the Fly app's `internal_port` set to `8080`.
 
-The app requires a reachable PostgreSQL database before it starts. Attach a Fly Postgres database (which sets `DATABASE_URL`) or set the connection string as a Fly secret:
+The web server starts immediately, so the app shell and assets always load even while PostgreSQL is unreachable. Database-backed routes return HTTP `503` with a retryable message until the schema is ready; the app retries the schema in the background every 15 seconds. `GET /api/health` reports `{"status":"degraded","database":"unavailable"}` until then and `{"status":"ok","database":"ready"}` after the schema is applied.
+
+Attach a Fly Postgres database (which sets `DATABASE_URL`) or set the connection string as a Fly secret:
 
 ```powershell
 fly launch --no-deploy
@@ -31,7 +33,9 @@ fly secrets set DATABASE_URL="postgres://USER:PASSWORD@HOST:5432/DATABASE"
 fly deploy
 ```
 
-If machines keep restarting, check `fly logs` for startup errors. A missing or unreachable `DATABASE_URL`, invalid database credentials, or a database TLS mismatch prevents startup; configure `PGSSLMODE=require` as a Fly secret when your database requires TLS. Do not put database credentials in `fly.toml` or commit them to the repository.
+Set `PGSSLMODE` when your database requires TLS. `require` encrypts the connection without validating the certificate (matching libpq), while `verify-ca`/`verify-full` validate it and can use `PGSSLROOTCERT` for a private CA. When `sslmode` is part of `DATABASE_URL` instead, the `pg` driver applies its own (stricter) semantics. Do not put database credentials in `fly.toml` or commit them to the repository.
+
+If the UI loads but creator data stays empty, run `fly logs` and check the `PostgreSQL is unavailable (...)` line. That message names the missing secret or connection problem; the UI recovers automatically once the database is reachable.
 
 ## Data model
 

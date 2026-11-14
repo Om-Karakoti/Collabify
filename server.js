@@ -34,18 +34,75 @@ const staticFiles = {
 const rateLimits = new Map();
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 30;
+const DB_RETRY_MS = Number(process.env.DB_RETRY_MS || 15000);
+let databaseReady = false;
+let databaseInitialization = null;
+let databaseRetryTimer = null;
+
+function resolveSslConfig() {
+  let mode = (process.env.PGSSLMODE || '').toLowerCase();
+  if (!mode && process.env.DATABASE_URL) {
+    try {
+      mode = (new URL(process.env.DATABASE_URL).searchParams.get('sslmode') || '').toLowerCase();
+    } catch {
+      // An invalid connection string is reported by the pool when it connects.
+    }
+  }
+  if (!mode || ['disable', 'allow', 'prefer'].includes(mode)) return undefined;
+  const ca = process.env.PGSSLROOTCERT ? readFileSync(process.env.PGSSLROOTCERT, 'utf8') : undefined;
+  return {
+    rejectUnauthorized: mode === 'verify-ca' || mode === 'verify-full',
+    ...(ca ? { ca } : {})
+  };
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: Number(process.env.PG_POOL_MAX || 20),
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
-  ssl: process.env.PGSSLMODE === 'require' ? {
-    rejectUnauthorized: true,
-    ...(process.env.PGSSLROOTCERT ? { ca: readFileSync(process.env.PGSSLROOTCERT, 'utf8') } : {})
-  } : undefined
+  ssl: resolveSslConfig()
 });
 
-pool.on('error', error => console.error('Unexpected PostgreSQL pool error:', error));
+pool.on('error', error => {
+  databaseLastError = error;
+  console.error('Unexpected PostgreSQL pool error:', error);
+});
+
+function scheduleDatabaseRetry() {
+  if (databaseRetryTimer) return;
+  databaseRetryTimer = setTimeout(() => {
+    databaseRetryTimer = null;
+    initializeDatabase().catch(() => {});
+  }, DB_RETRY_MS);
+  databaseRetryTimer.unref();
+}
+
+async function initializeDatabase() {
+  if (databaseReady) return true;
+  if (databaseInitialization) return databaseInitialization;
+  databaseInitialization = (async () => {
+    try {
+      if (!process.env.DATABASE_URL) {
+        throw new Error('DATABASE_URL is not set. Add it in your hosting provider secrets or local .env file.');
+      }
+      const schema = await readFile(path.join(ROOT, 'db', 'schema.sql'), 'utf8');
+      await pool.query(schema);
+      databaseReady = true;
+      databaseLastError = null;
+      console.log('PostgreSQL schema is ready.');
+      return true;
+    } catch (error) {
+      databaseLastError = error;
+      console.error(`PostgreSQL is unavailable (${error.message}). Serving the app UI and retrying every ${DB_RETRY_MS / 1000}s.`);
+      scheduleDatabaseRetry();
+      return false;
+    } finally {
+      databaseInitialization = null;
+    }
+  })();
+  return databaseInitialization;
+}
 
 function sendJson(response, status, value) {
   response.writeHead(status, {
@@ -88,9 +145,15 @@ function readJsonBody(request) {
   });
 }
 
+function clientAddress(request) {
+  const forwarded = request.headers['fly-client-ip'] || request.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) return forwarded.split(',')[0].trim();
+  return request.socket.remoteAddress || 'unknown';
+}
+
 function applyRateLimit(request, response) {
   const now = Date.now();
-  const key = request.socket.remoteAddress || 'unknown';
+  const key = clientAddress(request);
   const current = rateLimits.get(key);
   if (!current || current.expiresAt <= now) {
     if (rateLimits.size >= 10000) {
@@ -698,8 +761,18 @@ async function serveCreatorAvatar(url, response) {
 
 async function handleApi(request, response, url) {
   if (request.method === 'GET' && url.pathname === '/api/health') {
-    await pool.query('SELECT 1');
-    sendJson(response, 200, { status: 'ok' });
+    sendJson(response, 200, {
+      status: databaseReady ? 'ok' : 'degraded',
+      database: databaseReady ? 'ready' : 'unavailable'
+    });
+    return;
+  }
+  if (!databaseReady) {
+    response.setHeader('Retry-After', String(Math.max(1, Math.round(DB_RETRY_MS / 1000))));
+    sendJson(response, 503, {
+      error: 'Collabify is still connecting to its database. The app will be ready shortly; please retry in a few seconds.',
+      database: 'unavailable'
+    });
     return;
   }
   if (request.method === 'GET' && url.pathname.startsWith('/api/creators/') && url.pathname.endsWith('/avatar')) {
@@ -901,29 +974,33 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-async function start() {
-  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Copy .env.example to .env and configure PostgreSQL.');
-  const schema = await readFile(path.join(ROOT, 'db', 'schema.sql'), 'utf8');
-  await pool.query(schema);
-  server.listen(PORT, '0.0.0.0', () => console.log(`Collabify is running at http://0.0.0.0:${PORT}`));
+function start() {
+  server.on('error', error => {
+    console.error('Could not start the Collabify web server:', error.message);
+    process.exit(1);
+  });
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Collabify is running at http://0.0.0.0:${PORT}`);
+    initializeDatabase().catch(error => console.error('Could not initialize PostgreSQL:', error.message));
+  });
 }
 
 async function shutdown(signal) {
   console.log(`${signal} received; closing Collabify.`);
+  if (databaseRetryTimer) clearTimeout(databaseRetryTimer);
   server.close(async () => {
-    await pool.end();
-    process.exit(0);
+    try {
+      await pool.end();
+    } finally {
+      process.exit(0);
+    }
   });
 }
 
 if (require.main === module) {
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
-  start().catch(async error => {
-    console.error('Could not start Collabify:', error.message);
-    await pool.end();
-    process.exitCode = 1;
-  });
+  start();
 }
 
 module.exports = { validateCreator, validateAccount, validateProfileLinks, validateAvatar, audiences, niches, styles, platformSlugs };

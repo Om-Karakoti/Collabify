@@ -1,4 +1,23 @@
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- pg_trgm powers the trigram search index. It is optional: if the database user
+-- cannot install extensions, search still works through a sequential scan.
+DO $$
+BEGIN
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+EXCEPTION
+    WHEN insufficient_privilege OR feature_not_supported OR undefined_file THEN
+        RAISE NOTICE 'pg_trgm is unavailable; continuing without the trigram search index.';
+END
+$$;
+
+-- gen_random_uuid() is built into PostgreSQL 13+; pgcrypto supplies it on older servers.
+DO $$
+BEGIN
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+EXCEPTION
+    WHEN insufficient_privilege OR feature_not_supported OR undefined_file THEN
+        RAISE NOTICE 'pgcrypto is unavailable; relying on built-in gen_random_uuid().';
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS platforms (
     slug TEXT PRIMARY KEY,
@@ -94,8 +113,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS creators_handle_unique
     ON creators (LOWER(handle));
 CREATE INDEX IF NOT EXISTS creators_discovery_idx
     ON creators (niche, audience_size, content_style, created_at DESC);
-CREATE INDEX IF NOT EXISTS creators_search_trgm_idx
-    ON creators USING GIN ((name || ' ' || handle || ' ' || niche || ' ' || content_style || ' ' || bio) gin_trgm_ops);
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
+        EXECUTE $index$CREATE INDEX IF NOT EXISTS creators_search_trgm_idx
+            ON creators USING GIN ((name || ' ' || handle || ' ' || niche || ' ' || content_style || ' ' || bio) gin_trgm_ops)$index$;
+    END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS creator_platforms (
     creator_id UUID NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
