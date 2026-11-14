@@ -1,6 +1,6 @@
-# fly.toml app configuration file generated for collabify on 2026-11-12T10:24:26Z
+# fly.toml app configuration file generated for collabify on 2026-11-14T10:20:42Z
 #
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+# See https://docs.fly.io/reference/configuration for information about how to use this file.
 #
 
 app = 'collabify'
@@ -19,3 +19,4 @@ primary_region = 'ams'
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 256
